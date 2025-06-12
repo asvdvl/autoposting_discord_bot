@@ -125,14 +125,16 @@ class MemePoster(Client):
     async def schedule_next_post(self, no_wtime = False):
         global operational_data
 
+        curr_time = datetime.now()
         if no_wtime:
-            sleep_until = datetime.now()
+            sleep_until = curr_time
         else:
-            minutes_wait = max((operational_data["planned_end"] - datetime.now()).total_seconds() // 60 // operational_data["link_count"], 1)
-            drift = (10 - datetime.now().minute % 10) % 10
-            sleep_until = datetime.now() + timedelta(minutes=minutes_wait + drift)
+            minutes_wait = max((operational_data["planned_end"] - curr_time).total_seconds() // 60 // operational_data["link_count"], 5)
+            drift = (10 - minutes_wait % 10) % 10
+            sleep_until = (curr_time + timedelta(minutes=minutes_wait + drift)).replace(second=10)
+            print(f"drift {drift}; minutes_wait {minutes_wait}; sleep_until {sleep_until}")
 
-        job = self.scheduler.add_job(self.message_cycle, DateTrigger(run_date=sleep_until))
+        job = self.scheduler.add_job(self.message_cycle, DateTrigger(run_date=sleep_until), id="autoposting")
         next_run = job.next_run_time.strftime('%d/%m/%Y %H:%M:%S')
 
         print(f"Post planed on {next_run}")
@@ -141,6 +143,8 @@ class MemePoster(Client):
     async def on_ready(self):
         if self.is_running:
             print("Already running")
+            if self.scheduler.get_job("autoposting") is None:
+                await self.schedule_next_post(True)
             return
         self.is_running = True
 
