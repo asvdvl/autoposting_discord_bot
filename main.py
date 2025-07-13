@@ -28,7 +28,8 @@ def load_from_json(filename="state.json"):
 
 operational_data = {
     'planned_end': datetime.utcnow().timestamp(),
-    'link_count': 0
+    'link_count': 0,
+    'dont_reset_date_on_added_links': False     # makes it possible to add links to the queue without dumping the end date (requires reloading the bot)
 }
 
 # Check that the list of values ​​has all the necessary fields (and filling in the default value if not)
@@ -93,18 +94,20 @@ class MemePoster(Client):
 
         if operational_data["link_count"] != len(link_queue):
             print(*link_queue, sep='\n')
-            print("Reset end date")
+            if not operational_data["dont_reset_date_on_added_links"]:
+                print("Reset end date")
 
-            planning_days = int(os.getenv("PLANNING_FOR_DAYS", 3))
-            planned_end = datetime.utcnow() + timedelta(days=planning_days)
-            print(f"Now end at {planned_end.strftime('%d/%m/%Y %H:%M:%S')}")
+                planning_days = int(os.getenv("PLANNING_FOR_DAYS", 3))
+                planned_end = datetime.utcnow() + timedelta(days=planning_days)
+                print(f"Now end at {planned_end.strftime('%d/%m/%Y %H:%M:%S')}")
 
-            operational_data["planned_end"] = planned_end.timestamp()
+                operational_data["planned_end"] = planned_end.timestamp()
+                operational_data["dont_reset_date_on_added_links"] = False
             operational_data["link_count"] = len(link_queue)
 
             save_to_json(operational_data)
-
-            operational_data["planned_end"] = planned_end
+            if planned_end:
+                operational_data["planned_end"] = planned_end
 
         try:
             await prepare_message(self, link_queue[0], len(link_queue))
@@ -133,7 +136,7 @@ class MemePoster(Client):
         minutes_wait = int(max(
                 (operational_data["planned_end"].astimezone(self.tz) - curr_time).total_seconds() // 60 // operational_data["link_count"], 5
             ))
-        drift = 10 - (curr_time.minute % 10) + minutes_wait
+        drift = minutes_wait
         sleep_until = (curr_time + timedelta(minutes=drift)).replace(second=10)
 
         return sleep_until, minutes_wait, drift
