@@ -11,8 +11,8 @@ from apscheduler.triggers.date import DateTrigger
 import random, json
 
 load_dotenv()
-image_re = re.compile(r"^https://(?:cdn|media)\.discordapp\.(?:net|com)/attachments/\d+/\d+/.+\.(?:png|jpe?g|gif|webp)$", re.IGNORECASE)
-timeshtamp_re = re.compile(r"<\w:(\d+):\w> ")
+image_re = re.compile(r"^https:\/\/(?:cdn|media)\.discordapp\.(?:net|com)\/attachments\/\d+\/\d+\/.+\.(?:png|jpe?g|gif|webp)(?:\?|\&|ex=[\da-f]+|is=[\da-f]+|hm=[\da-f]+)*", re.IGNORECASE)
+timeshtamp_re = re.compile(r"<\w:(\d+):\w>")
 default_channel = "992565170633199706"
 
 def save_to_json(data, filename="state.json"):
@@ -59,9 +59,19 @@ class MemePoster(Client):
 
         queue_file = os.getenv("QUEUE_FILE")
 
-        async def prepare_message(self, url, count):
+        async def prepare_message(self, row, count):
             global operational_data
+            print(f"Sending: {row}")
+
             channel_id = int(os.getenv("DISCORD_CHANNEL_ID", default_channel))
+
+            params = row.split("|||")
+            url, channel_url, ts_copyed, ts_source = row, "", "", ""
+            if len(params) == 4:
+                ts_source = params[0]
+                ts_copyed = params[1]
+                url = params[2]
+                channel_url = params[3]
 
             def is_image(url) -> bool:
                 return image_re.match(url) is not None
@@ -70,20 +80,26 @@ class MemePoster(Client):
                 m = timeshtamp_re.search(url)
                 return int(m.group(1)) if m else 0
 
-            url_wo_timeshtamp = timeshtamp_re.sub("", url)
             channel = await self.fetch_channel(channel_id)
+            
+            now = datetime.now()
+            diff = operational_data["planned_end"] - now
+            ETA_string = f"(ETA {diff.days}d {int(diff.seconds / 3600)}h)"
+            if is_image(url):
+                h = 0
+                if not channel_url:
+                    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    h = (now - midnight).seconds/86400
+                else:
+                    h = int(channel_url.split("/")[-2])%86400
 
-            if is_image(url_wo_timeshtamp):
-                diff = operational_data["planned_end"] - datetime.now()
-
-                embed = Embed(colour=Colour.from_hsv(random.uniform(0, 1), 1, 0.6), timestamp=datetime.utcfromtimestamp(get_timestamp(url)))
-                embed.set_image(url=url_wo_timeshtamp)
-                embed.set_footer(text=f"{count} (ETA {diff.days}d {int(diff.seconds / 3600)}h)")
-                print(f"Sending embed: {url_wo_timeshtamp}")
+                embed = Embed(colour=Colour.from_hsv(h, 1, 0.6), timestamp=datetime.utcfromtimestamp(get_timestamp(ts_source)))
+                embed.set_author(name="src", url=channel_url)
+                embed.set_image(url=url)
+                embed.set_footer(text=f"{count} {ETA_string}")
                 await channel.send(embed=embed)
             else:
-                print(f"Sending: {url}")
-                await channel.send(content=f"||{count}|| {url}")
+                await channel.send(content=f"||{count} [src](<{channel_url}>) {ETA_string}|| {ts_source}-{ts_copyed} {url}")
 
         link_queue = deque()
 
@@ -113,7 +129,7 @@ class MemePoster(Client):
             await prepare_message(self, link_queue[0], len(link_queue))
         except Exception as e:
             print(f"Error sending message: {e}")
-            await asyncio.sleep(5)
+            await asyncio.sleep(10)
             return
 
         link_queue.popleft()
@@ -157,7 +173,7 @@ class MemePoster(Client):
 
         curr_time = datetime.now(self.tz)
         if min_wtime:
-            sleep_until = curr_time + timedelta(minutes=5)
+            sleep_until = curr_time + timedelta(minutes=1)
         else:
             sleep_until, minutes_wait, drift = await self.get_time_next_post(operational_data)
             print(f"drift {drift}; minutes_wait {minutes_wait}; sleep_until {sleep_until}")
