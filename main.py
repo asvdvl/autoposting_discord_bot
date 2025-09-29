@@ -190,7 +190,7 @@ class MemePoster(Client):
         if message.author == self.user:
             return
         
-        if message.channel.id == int(os.getenv("DISCORD_CHANNEL_ID", default_channel)) and len(message.attachments) > 0:
+        if message.channel.id == int(os.getenv("DISCORD_CHANNEL_ID", default_channel)):
             curr_time = datetime.now(timezone.utc)
             job = self.scheduler.get_job("autoposting")
             if job is None:
