@@ -99,7 +99,7 @@ class MemePoster(Client):
                 embed.set_footer(text=f"{count} {ETA_string}")
                 await channel.send(embed=embed)
             else:
-                await channel.send(content=f"||{count} [src](<{channel_url}>) {ETA_string}|| {ts_source}-{ts_copyed} {url}")
+                await channel.send(content=f"{count} [src](<{channel_url}>) {ETA_string} {ts_source}-{ts_copyed} {url}")
 
         link_queue = deque()
 
